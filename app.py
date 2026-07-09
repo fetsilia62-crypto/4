@@ -595,7 +595,8 @@ class App(tk.Tk):
             data = extract_passport_data(text)
             self.after(0, lambda: self._recognize_done(text, data))
         except Exception as error:
-            self.after(0, lambda: self._recognize_failed(error))
+            error_text = f"{type(error).__name__}: {error!r}"
+            self.after(0, lambda message=error_text: self._recognize_failed(message))
 
     def _recognize_done(self, text: str, data: dict[str, str]):
         self.raw_ocr = text
@@ -609,9 +610,12 @@ class App(tk.Tk):
             "Если адреса нет на загруженной странице, поле останется пустым.",
         )
 
-    def _recognize_failed(self, error: Exception):
+    def _recognize_failed(self, error_message: str):
         self.set_busy(False, "Ошибка распознавания")
-        messagebox.showerror("Ошибка OCR", str(error))
+        messagebox.showerror(
+            "Ошибка OCR",
+            error_message or "Неизвестная ошибка OCR. Сообщение отсутствует.",
+        )
 
     def show_ocr(self):
         if not self.raw_ocr:
