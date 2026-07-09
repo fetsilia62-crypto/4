@@ -31,22 +31,42 @@ jobs:
         shell: pwsh
         run: |
           choco install tesseract -y --no-progress
-          $tesseractExe = (Get-Command tesseract.exe).Source
-          $tesseractDir = Split-Path $tesseractExe
-          Copy-Item $tesseractDir "$env:GITHUB_WORKSPACE\tesseract" -Recurse -Force
 
-          $tessdata = "$env:GITHUB_WORKSPACE\tesseract\tessdata"
+          # Get-Command usually points to a Chocolatey shim, not to the real
+          # Tesseract installation. Copy the actual program directory.
+          $candidates = @(
+            "$env:ProgramFiles\Tesseract-OCR",
+            "${env:ProgramFiles(x86)}\Tesseract-OCR"
+          )
+
+          $tesseractDir = $candidates |
+            Where-Object { $_ -and (Test-Path (Join-Path $_ "tesseract.exe")) } |
+            Select-Object -First 1
+
+          if (-not $tesseractDir) {
+            throw "The real Tesseract-OCR installation directory was not found."
+          }
+
+          $portableDir = "$env:GITHUB_WORKSPACE\tesseract"
+          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          Copy-Item "$tesseractDir\*" $portableDir -Recurse -Force
+
+          $tessdata = Join-Path $portableDir "tessdata"
           New-Item -ItemType Directory -Force -Path $tessdata | Out-Null
 
           Invoke-WebRequest `
             -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/rus.traineddata" `
-            -OutFile "$tessdata\rus.traineddata"
+            -OutFile (Join-Path $tessdata "rus.traineddata")
 
-          if (-not (Test-Path "$tessdata\eng.traineddata")) {
+          if (-not (Test-Path (Join-Path $tessdata "eng.traineddata"))) {
             Invoke-WebRequest `
               -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata" `
-              -OutFile "$tessdata\eng.traineddata"
+              -OutFile (Join-Path $tessdata "eng.traineddata")
           }
+
+          & (Join-Path $portableDir "tesseract.exe") --version
+          & (Join-Path $portableDir "tesseract.exe") --list-langs `
+            --tessdata-dir $tessdata
 
       - name: Build application
         shell: pwsh
